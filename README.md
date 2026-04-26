@@ -162,7 +162,8 @@ N/A — Derived from OSINT analysis of LinkedIn exhibit
 ```
 
 ### 🖼️ Screenshot
-*OSINT exhibit — LinkedIn post showing Azure portal with VM details*
+<img width="8423" height="19200" alt="evidence" src="https://github.com/user-attachments/assets/fa9bca45-84e9-45fe-b586-80bfa990eda0" />
+
 
 ### 🛠️ Detection Recommendation
 Implement a social media monitoring policy prohibiting screenshots of internal infrastructure. Enforce OPSEC training for all engineering staff, particularly those with access to cloud management consoles.
