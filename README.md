@@ -1,4 +1,4 @@
-# 🛡️ Threat Hunt Report – Operation Entropy Gorilla: PHTG HealthCloud Intrusion
+# 🛡️ Threat Hunt Report – Signals Before The Noise
 
 ---
 
