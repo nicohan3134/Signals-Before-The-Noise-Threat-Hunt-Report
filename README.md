@@ -1888,7 +1888,6 @@ All findings are fully reproducible via the KQL queries documented in this repor
 | IP (C2) | 173.244.55.130 |
 | Subnet | 173.244.55.128/28 |
 | SHA256 | 224462ce5e3304e3fd0875eeabc829810a894911e3d4091d4e60e67a2687e695 |
-| URL | https://unresuscitating-donnette-smothery.ngrok-free.app/ |
 | Malware | Trojan:Win32/Meterpreter.gen!E |
 | Account | vmadminusername |
 | C2 Port | 4444 |
