@@ -203,6 +203,8 @@ N/A — Derived from OSINT analysis of Azure portal exhibit
 
 ### 🖼️ Screenshot
 *Azure portal networking panel showing public IP assignment*
+<img width="1363" height="996" alt="evidence2" src="https://github.com/user-attachments/assets/560d8a3b-8476-4ca8-9ccb-800e3f3fe913" />
+
 
 ### 🛠️ Detection Recommendation
 Remove public IP assignments from all VMs that do not require direct internet access. Use Azure Bastion for remote administration. Enforce NSG rules restricting RDP to known corporate IPs only.
@@ -275,6 +277,8 @@ N/A — Multiple choice analysis
 
 ### 🖼️ Screenshot
 *LinkedIn exhibit — workstation showing Azure portal*
+<img width="8423" height="19200" alt="evidence" src="https://github.com/user-attachments/assets/3e55a6c6-ece3-47e0-81b6-ffdcd7944af5" />
+
 
 ### 🛠️ Detection Recommendation
 Implement a clear desk/clear screen policy for all remote work environments. Prohibit photography of workstations during active cloud management sessions.
@@ -348,12 +352,14 @@ Port 3389 is the Windows Remote Desktop Protocol port. Its exposure to the inter
 DeviceNetworkEvents
 | where TimeGenerated between (datetime(2025-12-09) .. datetime(2025-12-23))
 | where DeviceName == "azwks-phtg-02"
+| where ActionType == "InboundConnectionAccepted"
 | where RemoteIPType == "Public"
-| summarize count() by LocalPort, ActionType
+| project TimeGenerated, DeviceName, ActionType, RemoteIP, RemotePort, LocalIP, LocalPort
 ```
 
 ### 🖼️ Screenshot
-*All 194 events targeting port 3389*
+<img width="1185" height="741" alt="flag 6" src="https://github.com/user-attachments/assets/6f2d22e6-0a06-4400-b5b2-ab68d245394a" />
+
 
 ### 🛠️ Detection Recommendation
 Create an alert for any `InboundConnectionAccepted` event on port 3389 from a public IP. No legitimate remote access should originate from unknown public IPs.
@@ -395,12 +401,12 @@ DeviceNetworkEvents
 | where LocalPort == 3389
 | where RemoteIPType == "Public"
 | summarize TotalAccepted = countif(ActionType == "InboundConnectionAccepted"),
-            TotalAttempts = countif(ActionType == "ConnectionAttempt"),
             UniqueIPs = dcount(RemoteIP)
 ```
 
 ### 🖼️ Screenshot
-*194 total accepted connections confirmed*
+<img width="1187" height="397" alt="flag 7" src="https://github.com/user-attachments/assets/e0f554c2-40e6-4549-b279-ea9779d3cdf1" />
+
 
 ### 🛠️ Detection Recommendation
 Set a threshold alert: if any single device receives more than 20 unique public source IPs on port 3389 within 24 hours, escalate immediately.
@@ -443,7 +449,8 @@ DeviceNetworkEvents
 ```
 
 ### 🖼️ Screenshot
-*173 distinct source IPs confirmed*
+<img width="1187" height="398" alt="flag 8" src="https://github.com/user-attachments/assets/66469a2e-244f-4a0e-b296-654c3ff44812" />
+
 
 ### 🛠️ Detection Recommendation
 Block entire `/24` subnets when multiple IPs from the same range appear in scanning activity. Add `205.210.31.0/24` to deny rules immediately.
@@ -487,7 +494,8 @@ DeviceNetworkEvents
 ```
 
 ### 🖼️ Screenshot
-*57 IPs confirmed with both action types*
+<img width="1183" height="743" alt="flag 9" src="https://github.com/user-attachments/assets/7caeac23-4e55-4d26-931d-a80220a61798" />
+
 
 ### 🛠️ Detection Recommendation
 Investigate the 4 internal `10.0.8.x` addresses immediately — any internal host probing RDP on another internal machine warrants review as a potential compromised endpoint.
@@ -521,19 +529,35 @@ The 57 IPs with both connection types spanned **11 distinct countries**.
 ### 🔧 KQL Query Used
 ```kql
 let GeoTable =
-    externaldata(network:string, geoname_id:long, continent_code:string,
+    externaldata(network:string, geoname_id:long, continent_code:string, 
                  continent_name:string, country_iso_code:string, country_name:string)
     [@"https://raw.githubusercontent.com/datasets/geoip2-ipv4/main/data/geoip2-ipv4.csv"]
     with (format="csv");
 let TargetIPs = datatable(RemoteIP:string)
-["173.244.55.128","212.192.252.175" /* ... full list of 57 IPs ... */];
+[
+    "173.244.55.128", "212.192.252.175", "173.244.55.131", "173.239.218.124",
+    "198.235.24.164", "146.190.241.66", "101.36.108.133", "91.230.168.2",
+    "91.230.168.3", "206.168.34.56", "206.168.34.205", "157.245.7.10",
+    "65.49.1.80", "45.55.132.139", "20.221.75.193", "20.64.104.82",
+    "4.206.105.128", "199.45.155.76", "205.210.31.97", "205.210.31.8",
+    "115.238.44.234", "66.132.153.122", "205.210.31.250", "205.210.31.46",
+    "202.107.226.4", "198.235.24.224", "20.163.15.217", "62.210.206.165",
+    "206.168.34.222", "87.236.176.207", "159.223.147.52", "107.173.60.43",
+    "4.239.126.103", "134.122.160.180", "198.235.24.181", "205.210.31.159",
+    "200.9.154.79", "20.221.68.115", "134.122.47.204", "52.234.35.183",
+    "3.83.145.39", "205.210.31.202", "35.203.210.136", "3.132.23.201",
+    "98.94.74.185", "65.49.1.203", "198.235.24.206", "162.142.125.201",
+    "216.218.206.66", "93.84.91.40", "20.163.20.206", "54.67.114.60",
+    "147.185.132.18", "10.0.8.5", "10.0.8.6", "10.0.8.8", "10.0.8.9"
+];
 TargetIPs
 | evaluate ipv4_lookup(GeoTable, RemoteIP, network)
-| summarize dcount(country_name)
+| summarize UniqueCountries = dcount(country_name)
 ```
 
 ### 🖼️ Screenshot
-*GeoIP enrichment confirming 11 distinct countries*
+<img width="1175" height="710" alt="flag 10" src="https://github.com/user-attachments/assets/f491be7c-0be6-4c9e-a5bb-49b8c533d786" />
+
 
 ### 🛠️ Detection Recommendation
 Implement geo-blocking at the NSG level for countries with no legitimate business relationship. At minimum, restrict RDP to known corporate IP ranges only.
@@ -571,11 +595,11 @@ DeviceLogonEvents
 | where TimeGenerated between (datetime(2025-12-09) .. datetime(2025-12-23))
 | where DeviceName == "azwks-phtg-02"
 | where RemoteIPType == "Public"
-| summarize count()
 ```
 
 ### 🖼️ Screenshot
-*693 total external auth events confirmed*
+<img width="1185" height="740" alt="flag 11" src="https://github.com/user-attachments/assets/9dfcda0a-ad62-4e5e-a92f-f15b1d963b31" />
+
 
 ### 🛠️ Detection Recommendation
 Alert on any device receiving more than 10 failed authentication attempts from a single external IP within 5 minutes. Implement account lockout policies and MFA on all internet-facing accounts.
@@ -617,6 +641,8 @@ DeviceLogonEvents
 
 ### 🖼️ Screenshot
 *675 RDP auth events confirmed*
+<img width="1187" height="496" alt="flag 12" src="https://github.com/user-attachments/assets/beed850c-e9ca-4017-8f33-806e0b190888" />
+
 
 ### 🛠️ Detection Recommendation
 Any device receiving more than 50 `RemoteInteractive` logon failures from external IPs in a 24-hour period should trigger an automatic isolation response.
@@ -659,6 +685,8 @@ DeviceLogonEvents
 
 ### 🖼️ Screenshot
 *LogonFailed as the dominant ActionType*
+<img width="1189" height="463" alt="flag 13" src="https://github.com/user-attachments/assets/20821881-60b4-43f3-b7a0-a5d455e3b618" />
+
 
 ### 🛠️ Detection Recommendation
 Configure Sentinel to alert when `LogonFailed` count exceeds 20 from a single source IP within 10 minutes on any device, combined with a subsequent `LogonSuccess` from the same source.
@@ -702,6 +730,8 @@ DeviceLogonEvents
 
 ### 🖼️ Screenshot
 *InvalidUserNameOrPassword as dominant failure reason*
+<img width="1184" height="433" alt="flag 14" src="https://github.com/user-attachments/assets/49148d52-73de-43ae-92ba-aba34b4056df" />
+
 
 ### 🛠️ Detection Recommendation
 Enforce strong password policies and implement MFA. Weak, predictable credentials like `vmadminusername` should be rejected at account creation time.
@@ -747,11 +777,13 @@ DeviceLogonEvents
 | where ActionType == "LogonFailed"
 | distinct RemoteIP
 | evaluate ipv4_lookup(GeoTable, RemoteIP, network)
-| summarize dcount(country_name)
+| summarize UniqueCountries = dcount(country_name)
 ```
 
 ### 🖼️ Screenshot
 *17 countries confirmed from auth activity*
+<img width="1185" height="706" alt="flag 15" src="https://github.com/user-attachments/assets/7ecc0e6d-33af-4ae6-bcd7-b8080219f35d" />
+
 
 ### 🛠️ Detection Recommendation
 Combine network and authentication telemetry for complete geographic coverage — neither source alone provides a full picture of the attack surface.
@@ -797,11 +829,12 @@ DeviceLogonEvents
 | where ActionType == "LogonSuccess"
 | distinct RemoteIP
 | evaluate ipv4_lookup(GeoTable, RemoteIP, network)
-| summarize dcount(country_name)
 ```
 
 ### 🖼️ Screenshot
 *2 countries with LogonSuccess confirmed*
+<img width="1184" height="576" alt="flag 16" src="https://github.com/user-attachments/assets/dc7a7e0d-4753-4999-8585-3e4371678f7d" />
+
 
 ### 🛠️ Detection Recommendation
 Implement Conditional Access policies that block or require step-up authentication for logons originating outside the organization's known operating countries.
@@ -852,6 +885,8 @@ DeviceLogonEvents
 
 ### 🖼️ Screenshot
 *Uruguay and United States confirmed as successful auth countries*
+<img width="1188" height="492" alt="flag 17" src="https://github.com/user-attachments/assets/65dce224-c76a-44e4-8997-54a95783d342" />
+
 
 ### 🛠️ Detection Recommendation
 Build a KQL watchlist of authorized countries for your organization and alert on any `LogonSuccess` from outside that list.
@@ -885,11 +920,9 @@ Uruguay has no legitimate business relationship with PHTG. Successful RDP authen
 
 ### 🔧 KQL Query Used
 ```kql
--- Same as Flag 17 with country_name == "Uruguay" filter applied
+N/A
 ```
 
-### 🖼️ Screenshot
-*Uruguay confirmed as unauthorized access origin*
 
 ### 🛠️ Detection Recommendation
 Immediately block all inbound RDP from the `173.244.55.128/28` subnet. Treat all sessions from this range as attacker-controlled.
@@ -935,6 +968,8 @@ DeviceLogonEvents
 
 ### 🖼️ Screenshot
 *vmadminusername confirmed as compromised account with sarah-che device name*
+<img width="1185" height="744" alt="flag 18" src="https://github.com/user-attachments/assets/a040f44c-ad8e-4141-a023-66347a2df79f" />
+
 
 ### 🛠️ Detection Recommendation
 Enforce a naming convention policy preventing generic account names. Require all local admin accounts to use complex non-guessable names combined with MFA. Disable or rename the default administrator account on all VMs at provisioning time.
@@ -987,6 +1022,8 @@ DeviceLogonEvents
 
 ### 🖼️ Screenshot
 *23 genuine external Uruguay logons confirmed*
+<img width="1183" height="730" alt="flag 19" src="https://github.com/user-attachments/assets/58b71cca-2797-4189-9168-9ec6808c3717" />
+
 
 ### 🛠️ Detection Recommendation
 When counting external authentication events, always filter on `AdditionalFields has "IsLocalLogon\":false"` to exclude locally-initiated session actions.
@@ -1028,11 +1065,12 @@ DeviceLogonEvents
 | where RemoteIP startswith "173.244.55"
 | project TimeGenerated, AccountName, RemoteIP
 | order by TimeGenerated asc
-| take 1
 ```
 
 ### 🖼️ Screenshot
 *173.244.55.131 confirmed as first successful logon IP*
+<img width="1182" height="746" alt="flag 21" src="https://github.com/user-attachments/assets/cf535691-54a0-44d1-be84-efcb4f2f3342" />
+
 
 ### 🛠️ Detection Recommendation
 This IP and all associated subnet IPs should be added to threat intelligence blocklists and NSG deny rules immediately upon discovery.
@@ -1073,11 +1111,14 @@ DeviceLogonEvents
 | where RemoteIPType == "Public"
 | where ActionType == "LogonSuccess"
 | where RemoteIP startswith "173.244.55"
-| summarize count() by RemoteIP
+| where LogonType != 'Unlock'
 ```
 
 ### 🖼️ Screenshot
 *173.244.55.128 confirmed as second Uruguay logon IP*
+<img width="1183" height="731" alt="flag 22" src="https://github.com/user-attachments/assets/b47d2b69-53c9-45d6-b298-634598ba5980" />
+
+
 
 ### 🛠️ Detection Recommendation
 Block the entire `173.244.55.128/28` subnet at NSG level. All three attacker IPs (RDP and C2) fall within this range.
@@ -1129,6 +1170,9 @@ DeviceProcessEvents
 
 ### 🖼️ Screenshot
 *notepad.exe confirmed as first interactive process post-logon*
+<img width="1184" height="746" alt="flag 23" src="https://github.com/user-attachments/assets/3fae8352-158e-4aeb-a860-1189a084f119" />
+
+
 
 ### 🛠️ Detection Recommendation
 Alert on text editors opening files in sensitive directories during off-hours or from sessions originating from anomalous geographic locations.
@@ -1173,6 +1217,9 @@ DeviceFileEvents
 
 ### 🖼️ Screenshot
 *notes_sarah.txt identified as attacker-created file*
+<img width="1185" height="485" alt="flag 24" src="https://github.com/user-attachments/assets/541c48ac-2386-46ed-9f22-6e9e9ef009d9" />
+
+
 
 ### 🛠️ Detection Recommendation
 Alert on file creation or modification in user document directories during sessions from anomalous source IPs. Personal name patterns in corporate directories warrant immediate investigation.
@@ -1219,6 +1266,9 @@ DeviceFileEvents
 
 ### 🖼️ Screenshot
 *Sarah_Chen_Notes.exe confirmed as first executable form*
+<img width="1184" height="538" alt="flag 25" src="https://github.com/user-attachments/assets/85cc5bd4-e275-47d9-8866-a9e3d661f453" />
+
+
 
 ### 🛠️ Detection Recommendation
 Alert on `FileRenamed` events where the new filename has an executable extension (`.exe`, `.bat`, `.ps1`) and the previous filename had a non-executable extension. This pattern is a strong indicator of double-extension evasion.
@@ -1263,6 +1313,8 @@ DeviceFileEvents
 
 ### 🖼️ Screenshot
 *Sarah_Chen_Notes.exe.Txt confirmed as double-extension filename*
+<img width="1184" height="451" alt="flag 26" src="https://github.com/user-attachments/assets/2b7e6f23-bb87-4832-8a0a-40a1baea579b" />
+
 
 ### 🛠️ Detection Recommendation
 Enable file extension visibility across all endpoints (disable "Hide extensions for known file types" in Windows Explorer). Alert on any file with a double extension pattern (`*.exe.txt`, `*.bat.txt`) being created or downloaded.
@@ -1306,6 +1358,8 @@ DeviceFileEvents
 
 ### 🖼️ Screenshot
 *SHA256 confirmed: 224462ce5e3304e3fd0875eeabc829810a894911e3d4091d4e60e67a2687e695*
+<img width="1186" height="542" alt="flag 27" src="https://github.com/user-attachments/assets/39ee5d25-be58-4b61-8eb4-ea9b0e1d482d" />
+
 
 ### 🛠️ Detection Recommendation
 Add this SHA256 to Microsoft Defender custom indicators as a block. Search all other endpoints in the environment for any file matching this hash.
@@ -1350,6 +1404,8 @@ DeviceFileEvents
 
 ### 🖼️ Screenshot
 *PHTG.exe confirmed as final filename at HealthCloud path*
+<img width="1184" height="650" alt="flag 28" src="https://github.com/user-attachments/assets/0899779b-aa09-4696-af6f-eba212dc396a" />
+
 
 ### 🛠️ Detection Recommendation
 Maintain a file integrity baseline for all service directories. Any new executable appearing in `C:\ProgramData\PHTG\HealthCloud\` that was not part of the original deployment should trigger an alert.
@@ -1387,7 +1443,6 @@ Meterpreter is one of the most capable post-exploitation frameworks available �
 DeviceEvents
 | where TimeGenerated between (datetime(2025-12-09) .. datetime(2025-12-23))
 | where DeviceName == "azwks-phtg-02"
-| where ActionType has "AntivirusDetection"
 | where SHA256 == "224462ce5e3304e3fd0875eeabc829810a894911e3d4091d4e60e67a2687e695"
 | project TimeGenerated, ActionType, SHA256, AdditionalFields
 | order by TimeGenerated asc
@@ -1395,6 +1450,8 @@ DeviceEvents
 
 ### 🖼️ Screenshot
 *Trojan:Win32/Meterpreter classifications confirmed in AdditionalFields*
+<img width="1181" height="725" alt="flag 29" src="https://github.com/user-attachments/assets/77c8cdc4-2985-443e-9bbc-34294a5301c5" />
+
 
 ### 🛠️ Detection Recommendation
 Configure alerts for any Meterpreter detection regardless of Defender's operating mode. The detection itself — even in passive mode — should trigger an immediate incident response workflow.
@@ -1432,7 +1489,6 @@ Switching Defender to Passive Mode is achievable via registry modification and i
 DeviceEvents
 | where TimeGenerated between (datetime(2025-12-09) .. datetime(2025-12-23))
 | where DeviceName == "azwks-phtg-02"
-| where ActionType has "AntivirusDetection"
 | where SHA256 == "224462ce5e3304e3fd0875eeabc829810a894911e3d4091d4e60e67a2687e695"
 | project TimeGenerated, ActionType, AdditionalFields
 -- Look for ReportSource containing "passive mode"
@@ -1440,6 +1496,8 @@ DeviceEvents
 
 ### 🖼️ Screenshot
 *"Windows Defender Antivirus passive mode" confirmed in ReportSource field*
+<img width="1683" height="751" alt="flag 30" src="https://github.com/user-attachments/assets/cb83a093-9899-4fae-b281-d7e967e23f28" />
+
 
 ### 🛠️ Detection Recommendation
 Enable Microsoft Defender Tamper Protection to prevent unauthorized mode changes. Alert immediately on registry modifications to `HKLM\SOFTWARE\Policies\Microsoft\Windows Advanced Threat Protection` — specifically `ForceDefenderPassiveMode` being set to `1`.
@@ -1484,6 +1542,8 @@ DeviceProcessEvents
 
 ### 🖼️ Screenshot
 *Sarah_Chen_Notes.exe confirmed as Phase 1 execution filename*
+<img width="1681" height="541" alt="flag 31" src="https://github.com/user-attachments/assets/2501aebe-576d-4de9-9beb-76d8be62ee90" />
+
 
 ### 🛠️ Detection Recommendation
 Alert on any process execution matching known malicious SHA256 hashes regardless of filename — hash-based detection is rename-resistant.
@@ -1528,6 +1588,8 @@ DeviceProcessEvents
 
 ### 🖼️ Screenshot
 *cmd.exe confirmed as initiating process for PHTG.exe*
+<img width="1680" height="410" alt="flag 32" src="https://github.com/user-attachments/assets/fffd70ec-03f6-4f9c-8f6f-6200a5cde65b" />
+
 
 ### 🛠️ Detection Recommendation
 Alert on `cmd.exe` spawning executables from `C:\ProgramData\` directories — this is an unusual pattern for legitimate service execution and a reliable indicator of batch-based persistence.
@@ -1572,6 +1634,9 @@ DeviceProcessEvents
 
 ### 🖼️ Screenshot
 *C:\ProgramData\PHTG\HealthCloud\Launch.bat confirmed in InitiatingProcessCommandLine*
+<img width="1683" height="412" alt="flag 33" src="https://github.com/user-attachments/assets/f376b253-bcb9-42ea-a55d-7fa20c3cef40" />
+
+
 
 ### 🛠️ Detection Recommendation
 Implement file integrity monitoring on all service directories. Any modification to `.bat` files in `C:\ProgramData\` should trigger an alert and require change management approval.
@@ -1618,6 +1683,8 @@ DeviceNetworkEvents
 
 ### 🖼️ Screenshot
 *C2 beacon to 173.244.55.130 confirmed*
+<img width="1678" height="442" alt="flag 33" src="https://github.com/user-attachments/assets/b8f17ce5-52c6-4bd3-98ca-e91b396c1813" />
+
 
 ### 🛠️ Detection Recommendation
 Block the entire `173.244.55.128/28` subnet immediately. Add `173.244.55.130` to threat intelligence feeds as a confirmed Meterpreter C2 endpoint.
@@ -1652,12 +1719,10 @@ Geographic attribution of C2 infrastructure is a key element of threat intellige
 
 ### 🔧 KQL Query Used
 ```kql
--- GeoIP lookup on 173.244.55.130 via GeoTable
--- Confirmed: network 173.244.55.128/28 → UY → Uruguay → South America
+
+N/A - Confirmed: network 173.244.55.128/28 → UY → Uruguay → South America
 ```
 
-### 🖼️ Screenshot
-*Uruguay, South America confirmed for 173.244.55.128/28 subnet*
 
 ### 🛠️ Detection Recommendation
 Add Uruguay to geo-blocking rules for all internet-facing services given the complete absence of legitimate business activity with this country.
@@ -1701,6 +1766,8 @@ DeviceNetworkEvents
 
 ### 🖼️ Screenshot
 *Port 4444 confirmed as C2 communication port*
+<img width="1681" height="450" alt="flag 36" src="https://github.com/user-attachments/assets/a5c56070-d938-46b9-9732-49223601ad3c" />
+
 
 ### 🛠️ Detection Recommendation
 Block all outbound connections to port 4444 at the firewall level — there is no legitimate business use for this port in most environments. Alert on any outbound connection to non-standard ports from endpoints.
@@ -1748,6 +1815,8 @@ DeviceFileEvents
 
 ### 🖼️ Screenshot
 *PHTG.exe and modified Launch.bat confirmed in HealthCloud directory*
+<img width="1681" height="746" alt="flag 37" src="https://github.com/user-attachments/assets/b3a70b00-4090-412a-b732-33d9cf71178f" />
+
 
 ### 🛠️ Detection Recommendation
 Any newly deployed service should have its directory added to file integrity monitoring from day one. Alert on any new executable appearing in a service directory that was not part of the original deployment package. Maintain a cryptographic baseline of all files in `C:\ProgramData\` service directories.
